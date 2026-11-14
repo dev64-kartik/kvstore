@@ -1,0 +1,13 @@
+# IDE
+.idea/
+.vscode/
+
+# Build output
+/bin/
+
+# Test artifacts
+coverage.out
+*.test
+
+# Note: testdata/fuzz/ is NOT ignored. Go's fuzzer writes failing inputs there, and they must be
+# committed so the failure becomes a permanent regression test.

@@ -1,0 +1,29 @@
+version: "2"
+
+linters:
+  # "standard" = errcheck, govet, ineffassign, staticcheck, unused.
+  default: standard
+  enable:
+    - errorlint   # flags `err == ErrX` and type assertions on errors; wrapped errors need errors.Is/As
+    - forbidigo   # bans time.Sleep (see settings)
+    - misspell
+    - nolintlint  # every //nolint must name the linter and give a reason
+    - unconvert
+  settings:
+    errcheck:
+      # CLAUDE.md: never ignore errors from Write/Sync/Close. This also flags `_ = f.Close()`,
+      # so discarding an error has to be explicit and justified with a //nolint comment.
+      check-blank: true
+      check-type-assertions: true
+    forbidigo:
+      forbid:
+        - pattern: ^time\.Sleep$
+          msg: "no time.Sleep for synchronization; use channels or poll with a deadline (CLAUDE.md)"
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
