@@ -99,7 +99,11 @@ seq    u64   // strictly +1 from the previous record, across segments
 payload      // op u8 (1=Put, 2=Delete) | keyLen uvarint | key | [valLen uvarint | value]
 ```
 
-- The CRC covers `length`, so a bit-flipped length fails the check and isn't trusted.
+- The CRC also covers `length`, so every header field except the CRC itself is protected. This matters less than it
+  sounds: a corrupted length already changes which bytes get checksummed, so the CRC fails either way (found in
+  step 2, when removing `length` from the CRC broke no test). LevelDB and RocksDB leave the length uncovered. We
+  keep it because it's free.
+- Only the shortest uvarint encoding is accepted, so each record has exactly one valid byte form.
 - The reader rejects `length > MaxPayload` *before allocating*. Otherwise a corrupt length would mean a 4 GiB
   `make([]byte, n)`.
 - Sequence numbers start at 1. A gap or regression is corruption.

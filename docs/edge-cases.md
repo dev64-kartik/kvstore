@@ -10,8 +10,13 @@ Status: **planned** (designed, not yet built) · **handled** (code + test exist)
 | 1.1 | Crash mid-append: last record partially on disk (short header/payload) | Torn tail: truncate at last good offset, fsync | `internal/wal` reader | — | planned (step 5) |
 | 1.2 | Crash after the file size is persisted but before the data: zero/garbage-filled tail | Bad CRC, no valid record after it → torn tail, truncate | `internal/wal` reader | — | planned (step 5) |
 | 1.3 | Bit flip in a record mid-log | Valid record found after it → `ErrCorrupt`, never skipped | `internal/wal` reader | — | planned (step 5) |
-| 1.4 | Bit flip in a *length* field near EOF, making real damage look like a torn tail | CRC covers length; forward scan finds later valid record → `ErrCorrupt` | `internal/wal` reader | — | planned (step 5) |
-| 1.5 | Corrupt length claims a huge payload | Reject `length > MaxPayload` before allocating | `internal/wal` codec | — | planned (step 2) |
+| 1.4 | Bit flip in a *length* field near EOF, making real damage look like a torn tail | Forward scan finds later valid record → `ErrCorrupt` | `internal/wal` reader | — | planned (step 5) |
+| 1.5 | Corrupt length claims a huge payload | `length > MaxPayload` → `ErrBadRecord` (not `ErrTruncated`), checked before the length is used | `wal.DecodeRecord` | `TestDecodeOversizedLengthIsBadNotTruncated` | handled |
+| 1.20 | Single bit flip anywhere in a record | CRC32C (guaranteed for crc/seq/payload; length flips change the checksummed range) | `wal.DecodeRecord` | `TestDecodeDetectsEveryBitFlip` | handled |
+| 1.21 | Record cut short at any byte | `ErrTruncated` | `wal.DecodeRecord` | `TestDecodeTruncatedAtEveryLength` | handled |
+| 1.22 | Valid CRC but malformed payload (writer bug) | Payload parsed strictly → `ErrBadRecord` | `wal.decodePayload` | `TestDecodeMalformedPayloadWithValidChecksum` | handled |
+| 1.23 | Record that can't be read back gets written | Same limits checked on encode → `ErrInvalidRecord` | `wal.AppendRecord` | `TestAppendRecordRejectsInvalid`, `FuzzRecordRoundTrip` | handled |
+| 1.24 | Appending to a decoded key overwrites the next field | Decoded slices have capacity capped (`p[:n:n]`) | `wal.readLengthPrefixed` | `TestDecodeAliasesInput` | handled |
 | 1.6 | Seq gap or regression (missing/reordered segment) | `ErrCorrupt` | `internal/wal` reader, `internal/localdb` recovery | — | planned (steps 5, 7) |
 | 1.7 | Bad record in a sealed (non-last) segment | Always `ErrCorrupt` | `internal/wal` reader | — | planned (step 5) |
 | 1.8 | Crash while creating a segment | Created as `.tmp` + header + fsync + rename + dir fsync; `.tmp` deleted on recovery | `internal/wal` writer | — | planned (step 4) |
