@@ -20,11 +20,11 @@ Status: **planned** (designed, not yet built) · **handled** (code + test exist)
 | 1.24 | Appending to a decoded key overwrites the next field | Decoded slices have capacity capped (`p[:n:n]`) | `wal.readLengthPrefixed` | `TestDecodeAliasesInput` | handled |
 | 1.6 | Seq gap or regression (missing/reordered segment) | `ErrCorrupt` | `internal/wal` reader, `internal/localdb` recovery | — | planned (steps 5, 7) |
 | 1.7 | Bad record in a sealed (non-last) segment | Always `ErrCorrupt` | `internal/wal` reader | — | planned (step 5) |
-| 1.8 | Crash while creating a segment | Created as `.tmp` + header + fsync + rename + dir fsync; `.tmp` deleted on recovery | `internal/wal` writer | — | planned (step 4) |
-| 1.9 | New file's directory entry not persisted | Dir fsync after create/rename; crashFS undoes un-synced dir entries | crashFS: `crashfs.FS.Crash`; writers: step 4 | crashFS side: `TestSyncedFileWithoutDirSyncVanishes`, `TestRenameAndRemoveNeedDirSync` | simulated; writers planned (step 4) |
+| 1.8 | Crash while creating a segment | `.tmp` + header + fsync + rename + dir fsync, so a visible segment name always has a complete header; `.tmp` deleted on recovery (step 7) | `wal.CreateSegment` | `TestCreateSegmentCrashAtEveryOp` (every op × both policies) | handled (tmp cleanup: step 7) |
+| 1.9 | New file's directory entry not persisted | Dir fsync after rename, before any record is acknowledged into the segment | `crashfs.FS.Crash` (simulation), `wal.CreateSegment` | `TestSyncedFileWithoutDirSyncVanishes`, `TestRenameAndRemoveNeedDirSync`, `TestCreateSegmentCrashAtEveryOp` | handled for segments; snapshots: step 6 |
 | 1.26 | Crash simulator itself wrong: synced bytes changed by later unsynced writes (truncate then append) | `Sync` stores a separate copy | `crashfs` `file.Sync` | `TestDropUnsyncedRevertsTruncateAndOverwrite` | handled |
 | 1.27 | Crash simulator not replayable: same seed, different outcome (Go map iteration order is random) | `Crash` walks directories and entries in sorted order | `crashfs.FS.Crash` | `TestCrashIsDeterministic` | handled |
-| 1.10 | `Write`/`Sync` error on WAL | Failed state: writes return `ErrFailed`, reads continue | `internal/localdb` | — | planned (step 7) |
+| 1.10 | `Write`/`Sync` error on WAL | Writer permanently failed (`ErrFailed`), no retry; DB-level: writes refused, reads continue | `wal.Writer.fail`; DB: `internal/localdb` | `TestIOErrorFailsWriterForever` | handled in WAL; DB: step 7 |
 | 1.11 | Failed fsync leaves never-persisted bytes in page cache; same-OS reopen sees them | Not fully handled: shows up as `ErrCorrupt` after reboot; Phase 3 rebuilds from peers | — | — | known gap |
 | 1.12 | Crash during snapshot before rename | `.tmp` deleted; old snapshot + all segments replayed | `internal/localdb` recovery | — | planned (step 7) |
 | 1.13 | Crash after snapshot rename, before old segments are deleted | Replay skips `seq ≤ snapSeq` | `internal/localdb` recovery | — | planned (step 7) |
@@ -34,3 +34,6 @@ Status: **planned** (designed, not yet built) · **handled** (code + test exist)
 | 1.19 | Empty value confused with missing key | A found value is always non-nil | `store.Map.Get`, `copyBytes` | `TestMapEmptyValueIsNotMissing` | handled |
 | 1.16 | `ctx` cancelled while waiting for the writer | Return `ctx.Err()`, nothing written | `internal/localdb` | — | planned (step 7) |
 | 1.17 | Two processes open the same data dir | Not handled (no `flock`) | — | — | known gap |
+| 1.28 | New segment created over a live one (stale startSeq), silently replacing acknowledged data via rename | Refuse if the name exists → `fs.ErrExist` | `wal.CreateSegment` | `TestCreateSegmentRefusesExisting` | handled |
+| 1.29 | Acknowledged WAL record lost after power loss | One `Write` + `Sync` per record; ack only after `Sync` | `wal.Writer.Append` | `TestAckedAppendsSurviveCrash`, `TestCrashDuringAppendsKeepsAckedPrefix` | handled |
+| 1.30 | Rejected (invalid) record poisons the writer or uses up a seq | Validation before any I/O; seq advanced only after `Sync` | `wal.Writer.Append` | `TestInvalidRecordDoesNotFailWriter` | handled |
