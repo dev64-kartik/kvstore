@@ -21,7 +21,9 @@ Status: **planned** (designed, not yet built) · **handled** (code + test exist)
 | 1.6 | Seq gap or regression (missing/reordered segment) | `ErrCorrupt` | `internal/wal` reader, `internal/localdb` recovery | — | planned (steps 5, 7) |
 | 1.7 | Bad record in a sealed (non-last) segment | Always `ErrCorrupt` | `internal/wal` reader | — | planned (step 5) |
 | 1.8 | Crash while creating a segment | Created as `.tmp` + header + fsync + rename + dir fsync; `.tmp` deleted on recovery | `internal/wal` writer | — | planned (step 4) |
-| 1.9 | New file's directory entry not persisted | Dir fsync after create/rename; crashFS undoes un-synced dir entries | `internal/vfs`, writers | — | planned (steps 3, 4) |
+| 1.9 | New file's directory entry not persisted | Dir fsync after create/rename; crashFS undoes un-synced dir entries | crashFS: `crashfs.FS.Crash`; writers: step 4 | crashFS side: `TestSyncedFileWithoutDirSyncVanishes`, `TestRenameAndRemoveNeedDirSync` | simulated; writers planned (step 4) |
+| 1.26 | Crash simulator itself wrong: synced bytes changed by later unsynced writes (truncate then append) | `Sync` stores a separate copy | `crashfs` `file.Sync` | `TestDropUnsyncedRevertsTruncateAndOverwrite` | handled |
+| 1.27 | Crash simulator not replayable: same seed, different outcome (Go map iteration order is random) | `Crash` walks directories and entries in sorted order | `crashfs.FS.Crash` | `TestCrashIsDeterministic` | handled |
 | 1.10 | `Write`/`Sync` error on WAL | Failed state: writes return `ErrFailed`, reads continue | `internal/localdb` | — | planned (step 7) |
 | 1.11 | Failed fsync leaves never-persisted bytes in page cache; same-OS reopen sees them | Not fully handled: shows up as `ErrCorrupt` after reboot; Phase 3 rebuilds from peers | — | — | known gap |
 | 1.12 | Crash during snapshot before rename | `.tmp` deleted; old snapshot + all segments replayed | `internal/localdb` recovery | — | planned (step 7) |
