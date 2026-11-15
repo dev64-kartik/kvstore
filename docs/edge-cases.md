@@ -16,6 +16,7 @@ Status: **planned** (designed, not yet built) · **handled** (code + test exist)
 | 1.21 | Record cut short at any byte | `ErrTruncated` | `wal.DecodeRecord` | `TestDecodeTruncatedAtEveryLength` | handled |
 | 1.22 | Valid CRC but malformed payload (writer bug) | Payload parsed strictly → `ErrBadRecord` | `wal.decodePayload` | `TestDecodeMalformedPayloadWithValidChecksum` | handled |
 | 1.23 | Record that can't be read back gets written | Same limits checked on encode → `ErrInvalidRecord` | `wal.AppendRecord` | `TestAppendRecordRejectsInvalid`, `FuzzRecordRoundTrip` | handled |
+| 1.25 | Failed open returns a non-nil `File` wrapping a nil `*os.File`, so `f != nil` checks pass and `Close` fails | `wrap` returns a literal nil on error | `vfs.wrap` | `vfstest` `MissingFileIsNotExist` | handled |
 | 1.24 | Appending to a decoded key overwrites the next field | Decoded slices have capacity capped (`p[:n:n]`) | `wal.readLengthPrefixed` | `TestDecodeAliasesInput` | handled |
 | 1.6 | Seq gap or regression (missing/reordered segment) | `ErrCorrupt` | `internal/wal` reader, `internal/localdb` recovery | — | planned (steps 5, 7) |
 | 1.7 | Bad record in a sealed (non-last) segment | Always `ErrCorrupt` | `internal/wal` reader | — | planned (step 5) |
