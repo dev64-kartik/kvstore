@@ -7,10 +7,10 @@ Status: **planned** (designed, not yet built) · **handled** (code + test exist)
 
 | # | Scenario | Handling | Where | Test | Status |
 |---|---|---|---|---|---|
-| 1.1 | Crash mid-append: last record partially on disk (short header/payload) | Torn tail: truncate at last good offset, fsync | `internal/wal` reader | — | planned (step 5) |
-| 1.2 | Crash after the file size is persisted but before the data: zero/garbage-filled tail | Bad CRC, no valid record after it → torn tail, truncate | `internal/wal` reader | — | planned (step 5) |
-| 1.3 | Bit flip in a record mid-log | Valid record found after it → `ErrCorrupt`, never skipped | `internal/wal` reader | — | planned (step 5) |
-| 1.4 | Bit flip in a *length* field near EOF, making real damage look like a torn tail | Forward scan finds later valid record → `ErrCorrupt` | `internal/wal` reader | — | planned (step 5) |
+| 1.1 | Crash mid-append: last record partially on disk (short header/payload) | Torn tail: scanning stops at the last good offset; truncation is step 5b | `wal.scanSegment` | `TestScanTornTailAtEveryCut` (every cut point), `TestScanAfterRealCrashesIsNeverCorrupt` | classified; truncation: step 5b |
+| 1.2 | Crash after the file size is persisted but before the data: zero/garbage-filled tail, or a full-length record with a zeroed sector | Bad record with no valid record after it → torn | `wal.scanSegment` | `TestScanTornTailShapes` | handled |
+| 1.3 | Bit flip in a record mid-log | Forward scan finds the next valid record → `ErrCorrupt`, never skipped | `wal.scanSegment`, `findLaterRecord` | `TestScanMidLogDamageIsCorrupt` | handled |
+| 1.4 | Bit flip in a *length* field mid-log, making real damage look like a torn tail | Forward scan finds the next valid record → `ErrCorrupt` | `wal.findLaterRecord` | `TestScanMidLogDamageIsCorrupt` ("length points past EOF") | handled |
 | 1.5 | Corrupt length claims a huge payload | `length > MaxPayload` → `ErrBadRecord` (not `ErrTruncated`), checked before the length is used | `wal.DecodeRecord` | `TestDecodeOversizedLengthIsBadNotTruncated` | handled |
 | 1.20 | Single bit flip anywhere in a record | CRC32C (guaranteed for crc/seq/payload; length flips change the checksummed range) | `wal.DecodeRecord` | `TestDecodeDetectsEveryBitFlip` | handled |
 | 1.21 | Record cut short at any byte | `ErrTruncated` | `wal.DecodeRecord` | `TestDecodeTruncatedAtEveryLength` | handled |
@@ -18,8 +18,8 @@ Status: **planned** (designed, not yet built) · **handled** (code + test exist)
 | 1.23 | Record that can't be read back gets written | Same limits checked on encode → `ErrInvalidRecord` | `wal.AppendRecord` | `TestAppendRecordRejectsInvalid`, `FuzzRecordRoundTrip` | handled |
 | 1.25 | Failed open returns a non-nil `File` wrapping a nil `*os.File`, so `f != nil` checks pass and `Close` fails | `wrap` returns a literal nil on error | `vfs.wrap` | `vfstest` `MissingFileIsNotExist` | handled |
 | 1.24 | Appending to a decoded key overwrites the next field | Decoded slices have capacity capped (`p[:n:n]`) | `wal.readLengthPrefixed` | `TestDecodeAliasesInput` | handled |
-| 1.6 | Seq gap or regression (missing/reordered segment) | `ErrCorrupt` | `internal/wal` reader, `internal/localdb` recovery | — | planned (steps 5, 7) |
-| 1.7 | Bad record in a sealed (non-last) segment | Always `ErrCorrupt` | `internal/wal` reader | — | planned (step 5) |
+| 1.6 | Seq gap or regression (missing/reordered segment) | Within a segment: checksum-valid record with the wrong seq → `ErrCorrupt`; across segments: step 5b | `wal.scanSegment` | `TestScanSeqOutOfOrderIsCorrupt` | handled in segment; across segments: step 5b |
+| 1.7 | Bad record in a sealed (non-last) segment | Always `ErrCorrupt` | `wal.scanSegment` | `TestScanTornTailAtEveryCut` (sealed case) | handled |
 | 1.8 | Crash while creating a segment | `.tmp` + header + fsync + rename + dir fsync, so a visible segment name always has a complete header; `.tmp` deleted on recovery (step 7) | `wal.CreateSegment` | `TestCreateSegmentCrashAtEveryOp` (every op × both policies) | handled (tmp cleanup: step 7) |
 | 1.9 | New file's directory entry not persisted | Dir fsync after rename, before any record is acknowledged into the segment | `crashfs.FS.Crash` (simulation), `wal.CreateSegment` | `TestSyncedFileWithoutDirSyncVanishes`, `TestRenameAndRemoveNeedDirSync`, `TestCreateSegmentCrashAtEveryOp` | handled for segments; snapshots: step 6 |
 | 1.26 | Crash simulator itself wrong: synced bytes changed by later unsynced writes (truncate then append) | `Sync` stores a separate copy | `crashfs` `file.Sync` | `TestDropUnsyncedRevertsTruncateAndOverwrite` | handled |
@@ -37,3 +37,5 @@ Status: **planned** (designed, not yet built) · **handled** (code + test exist)
 | 1.28 | New segment created over a live one (stale startSeq), silently replacing acknowledged data via rename | Refuse if the name exists → `fs.ErrExist` | `wal.CreateSegment` | `TestCreateSegmentRefusesExisting` | handled |
 | 1.29 | Acknowledged WAL record lost after power loss | One `Write` + `Sync` per record; ack only after `Sync` | `wal.Writer.Append` | `TestAckedAppendsSurviveCrash`, `TestCrashDuringAppendsKeepsAckedPrefix` | handled |
 | 1.30 | Rejected (invalid) record poisons the writer or uses up a seq | Validation before any I/O; seq advanced only after `Sync` | `wal.Writer.Append` | `TestInvalidRecordDoesNotFailWriter` | handled |
+| 1.31 | Torn in-flight record whose *value* contains a forged, checksum-valid record with the next seq: the forward scan finds it and reports corruption | Not handled: the DB refuses to start (loud, no data lost). The fix would be to skip over the bad record's declared length when it's plausible, which would weaken the defense in 1.4 | `wal.findLaterRecord` | — | known gap |
+| 1.32 | Bad or short segment header in the last segment "repaired" as a torn write | The header is synced before the file is named, so a bad header is always `ErrCorrupt` | `wal.checkSegmentHeader` | `TestScanBadHeaderIsCorrupt` | handled |

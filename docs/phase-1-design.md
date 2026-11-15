@@ -126,6 +126,11 @@ payload, or CRC mismatch. Classify it:
 
 A bad record in any **non-last** segment is always `ErrCorrupt`. Those segments were sealed.
 
+Known limitation (edge case 1.31): if the torn in-flight record's *value* happens to contain a complete,
+checksum-valid encoding of the next record (it would take attacker-chosen bytes and a correctly guessed seq), the
+forward scan finds it and reports `ErrCorrupt`. The failure is in the safe direction: the DB refuses to start and
+no data is lost.
+
 Alternatives rejected:
 - *Truncate at the first bad record, always* (LevelDB's default recovery mode). It silently drops acknowledged writes
   after a mid-log bit flip. That violates the core rule.
