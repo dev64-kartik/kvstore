@@ -114,9 +114,9 @@ func segmentGap(want, got uint64) error {
 
 // replaySealed reads and replays a segment that is no longer written to.
 func replaySealed(fsys vfs.FS, path string, startSeq uint64, replay func(Record) error) (uint64, error) {
-	data, err := readFile(fsys, path)
+	data, err := vfs.ReadFile(fsys, path)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("wal: read %s: %w", path, err)
 	}
 	info, err := scanSegment(path, data, startSeq, false, replay)
 	return info.lastSeq, err
@@ -202,22 +202,4 @@ func parseSegmentName(name string) (uint64, bool) {
 		return 0, false
 	}
 	return seq, true
-}
-
-// readFile reads a whole file through fsys.
-func readFile(fsys vfs.FS, path string) (_ []byte, err error) {
-	f, err := fsys.Open(path)
-	if err != nil {
-		return nil, fmt.Errorf("wal: open: %w", err)
-	}
-	defer func() {
-		if cerr := f.Close(); cerr != nil && err == nil {
-			err = fmt.Errorf("wal: close %s: %w", path, cerr)
-		}
-	}()
-	data, err := io.ReadAll(f)
-	if err != nil {
-		return nil, fmt.Errorf("wal: read %s: %w", path, err)
-	}
-	return data, nil
 }

@@ -50,6 +50,20 @@ type File interface {
 	Close() error
 }
 
+// ReadFile reads the whole named file through fsys.
+func ReadFile(fsys FS, name string) (_ []byte, err error) {
+	f, err := fsys.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if cerr := f.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
+	return io.ReadAll(f)
+}
+
 // OS returns an FS backed by the real operating system.
 //
 // On macOS, Go's File.Sync issues F_FULLFSYNC rather than fsync: plain fsync
