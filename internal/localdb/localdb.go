@@ -43,9 +43,17 @@ type Options struct {
 
 // DB is safe for concurrent use.
 //
-// Lock order: writeSlot before mu, never the reverse. Readers take only mu.
+// Lock order: snapSlot, then writeSlot, then mu; never the reverse. Readers
+// take only mu, writers only writeSlot and mu.
 type DB struct {
-	log *slog.Logger
+	dir  string
+	fsys vfs.FS
+	log  *slog.Logger
+
+	// snapSlot serializes Snapshot (and Close against it). Writing the file
+	// happens outside writeSlot, so writes continue meanwhile.
+	snapSlot chan struct{}
+	snapSeq  uint64 // seq of the newest installed snapshot; guarded by snapSlot
 
 	// writeSlot serializes the write path. It is a 1-slot channel rather than
 	// a sync.Mutex because acquiring it must be abandonable when ctx is
@@ -106,7 +114,11 @@ func Open(dir string, opts Options) (*DB, error) {
 		"replayed", replayed, "keys", tree.Len(), "next_seq", w.NextSeq())
 
 	return &DB{
+		dir:       dir,
+		fsys:      opts.FS,
 		log:       opts.Logger,
+		snapSlot:  make(chan struct{}, 1),
+		snapSeq:   snapSeq,
 		writeSlot: make(chan struct{}, 1),
 		wal:       w,
 		tree:      tree,
@@ -157,24 +169,19 @@ func (db *DB) Delete(ctx context.Context, key []byte) error {
 }
 
 func (db *DB) write(ctx context.Context, op wal.Op, key, value []byte) error {
-	if err := db.acquire(ctx); err != nil {
+	if err := acquire(ctx, db.writeSlot); err != nil {
 		return err
 	}
-	defer db.release()
-	if db.closed {
-		return ErrClosed
-	}
-	if db.failed != nil {
-		return fmt.Errorf("%w: %w", ErrFailed, db.failed)
+	defer release(db.writeSlot)
+	if err := db.writable(); err != nil {
+		return err
 	}
 
 	// Durable first, visible second. In the other order a Get could return a
 	// value that a crash then erases: a read of a write that never happened.
 	if _, err := db.wal.Append(op, key, value); err != nil {
 		if errors.Is(err, wal.ErrFailed) {
-			db.failed = err
-			db.log.Error("localdb: WAL failed; rejecting all further writes", "err", err)
-			return fmt.Errorf("%w: %w", ErrFailed, err)
+			return db.fail(err)
 		}
 		return err // can't happen after our own validation, but don't hide it
 	}
@@ -190,31 +197,53 @@ func (db *DB) write(ctx context.Context, op wal.Op, key, value []byte) error {
 	return nil
 }
 
-// acquire takes the writer slot, giving up if ctx ends first.
-func (db *DB) acquire(ctx context.Context) error {
+// writable reports why writes are refused, if they are. The caller holds
+// writeSlot.
+func (db *DB) writable() error {
+	if db.closed {
+		return ErrClosed
+	}
+	if db.failed != nil {
+		return fmt.Errorf("%w: %w", ErrFailed, db.failed)
+	}
+	return nil
+}
+
+// fail puts the DB in the failed state for good. The caller holds writeSlot.
+func (db *DB) fail(err error) error {
+	db.failed = err
+	db.log.Error("localdb: WAL failed; rejecting all further writes", "err", err)
+	return fmt.Errorf("%w: %w", ErrFailed, err)
+}
+
+// acquire takes a slot (writeSlot or snapSlot), giving up if ctx ends first.
+func acquire(ctx context.Context, slot chan struct{}) error {
 	select {
-	case db.writeSlot <- struct{}{}:
+	case slot <- struct{}{}:
 	case <-ctx.Done():
 		return ctx.Err()
 	}
 	// If both cases were ready, select picked one at random. Checking again
-	// makes "ctx already cancelled" mean "nothing written", always.
+	// makes "ctx already cancelled" mean "nothing done", always.
 	if err := ctx.Err(); err != nil {
-		db.release()
+		release(slot)
 		return err
 	}
 	return nil
 }
 
-func (db *DB) release() { <-db.writeSlot }
+func release(slot chan struct{}) { <-slot }
 
-// Close waits for the write in progress, if any, then closes the WAL. Every
-// later call, including Close, returns ErrClosed.
+// Close waits for the snapshot and write in progress, if any, then closes the
+// WAL. Every later call, including Close, returns ErrClosed.
 //
 // Close doesn't sync: every acknowledged write already was.
 func (db *DB) Close() error {
-	db.writeSlot <- struct{}{} // no ctx: Close must not leave a write half-done
-	defer db.release()
+	// No ctx: Close must not leave a write or snapshot half-done.
+	db.snapSlot <- struct{}{}
+	defer release(db.snapSlot)
+	db.writeSlot <- struct{}{}
+	defer release(db.writeSlot)
 	if db.closed {
 		return ErrClosed
 	}

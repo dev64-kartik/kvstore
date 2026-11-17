@@ -322,3 +322,19 @@ func FuzzDecodeSnapshot(f *testing.F) {
 		}
 	})
 }
+
+func TestRemoveOlder(t *testing.T) {
+	fsys := newSnapFS()
+	for _, seq := range []uint64{3, 7, 9} {
+		mustWrite(t, fsys, seq, mapOf("k", "v"))
+	}
+	vfstest.WriteFile(t, fsys, filepath.Join(snapDir, "wal-00000000000000000001.log"), "not ours")
+	removed, err := RemoveOlder(fsys, snapDir, 9)
+	if err != nil || removed != 2 {
+		t.Fatalf("RemoveOlder = %d, %v; want 2", removed, err)
+	}
+	want := []string{snapshotName(9), "wal-00000000000000000001.log"}
+	if got := vfstest.List(t, fsys, snapDir); !slices.Equal(got, want) {
+		t.Fatalf("left %q, want %q", got, want)
+	}
+}

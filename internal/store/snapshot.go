@@ -298,3 +298,24 @@ func readLengthPrefixed(p []byte) (data, rest []byte, err error) {
 	}
 	return p[:n], p[n:], nil
 }
+
+// RemoveOlder deletes every snapshot older than seq, and returns how many it
+// deleted. Call it only after the snapshot at seq is durably installed.
+// Like wal.RemoveCovered, it leaves the directory sync to the caller: an
+// undone removal is harmless, since LoadLatest only reads the newest.
+func RemoveOlder(fsys vfs.FS, dir string, seq uint64) (int, error) {
+	names, err := fsys.List(dir)
+	if err != nil {
+		return 0, fmt.Errorf("store: gc: %w", err)
+	}
+	removed := 0
+	for _, name := range names {
+		if s, ok := parseSnapshotName(name); ok && s < seq {
+			if err := fsys.Remove(filepath.Join(dir, name)); err != nil {
+				return removed, fmt.Errorf("store: gc: %w", err)
+			}
+			removed++
+		}
+	}
+	return removed, nil
+}

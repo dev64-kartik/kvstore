@@ -197,7 +197,7 @@ func TestCancelledContextWritesNothing(t *testing.T) {
 	// ctx.Done case, this Put would block forever.
 	db.writeSlot <- struct{}{}
 	err := db.Delete(ctx, []byte("k"))
-	db.release()
+	release(db.writeSlot)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Delete waiting for a held slot: err = %v", err)
 	}

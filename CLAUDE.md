@@ -93,7 +93,7 @@ Each phase leaves a working, demonstrable system.
 9. Benchmarks vs etcd, profiling, at least one profile-driven optimization
 10. Docs, README, architecture diagram, blog series (ongoing, finished last)
 
-**Current phase:** 1 · **Last thing done:** step 6 (snapshot format); step 7 (localdb) in progress
+**Current phase:** 1 · **Last thing done:** step 7 (localdb, incl. snapshots + GC); step 8 (crash tests) next
 
 ## Correctness rules
 

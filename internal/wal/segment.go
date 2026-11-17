@@ -49,11 +49,12 @@ func encodeSegmentHeader(startSeq uint64) []byte {
 // Writer appends records to one segment file. It is not safe for concurrent
 // use: localdb's writer slot serializes callers.
 type Writer struct {
-	f       vfs.File
-	path    string
-	nextSeq uint64
-	buf     []byte // reused encode buffer; it grows to the largest record seen
-	failed  error  // the first Write or Sync error, kept forever once set
+	f        vfs.File
+	path     string
+	startSeq uint64 // seq of this segment's first record (from its name)
+	nextSeq  uint64
+	buf      []byte // reused encode buffer; it grows to the largest record seen
+	failed   error  // the first Write or Sync error, kept forever once set
 }
 
 // CreateSegment durably creates an empty segment whose first record will
@@ -112,7 +113,13 @@ func CreateSegment(fsys vfs.FS, dir string, startSeq uint64) (_ *Writer, err err
 	}
 	// The handle stays open across the rename (it refers to the file, not the
 	// name) and is positioned just after the header.
-	return &Writer{f: f, path: final, nextSeq: startSeq}, nil
+	return &Writer{f: f, path: final, startSeq: startSeq, nextSeq: startSeq}, nil
+}
+
+// StartSeq is the seq of this segment's first record. The segment is empty
+// while StartSeq() == NextSeq().
+func (w *Writer) StartSeq() uint64 {
+	return w.startSeq
 }
 
 // NextSeq is the seq the next successful Append will be given.

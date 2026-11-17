@@ -171,13 +171,23 @@ magic u32 | version u16 | reserved u16 | seq u64 | count u64 | entries (keyLen u
 Entries are written in key order, so the same state always produces the same bytes. That makes it easy to test
 and lines up with Raft snapshots later.
 
-**Procedure** (`Snapshot()`; concurrent calls are serialized):
-1. Holding `writeSlot`: rotate the WAL to a new segment starting at `lastSeq+1`. Then take `mu` just for
-   `tree.Clone()` (O(1)). `google/btree` forbids running `Clone` concurrently with mutations, and taking `mu` also
-   keeps it clean under `-race`. Record `snapSeq = lastSeq`, then release `writeSlot`. Writes continue into the new
-   segment.
-2. Without holding any lock: write `snap-<snapSeq>.snap.tmp` → fsync → rename → fsync dir.
-3. Delete all segments before the new one and all older snapshots, then fsync dir.
+**Procedure** (`Snapshot()`; concurrent calls are serialized by a second slot, `snapSlot`, taken before
+`writeSlot`; `Close` takes both):
+1. Holding `writeSlot`: if nothing was written since the last snapshot, skip to step 3. Otherwise rotate the WAL
+   to a new segment starting at `lastSeq+1`, unless the current segment is still empty and so already starts there
+   (a retry after a failed attempt; edge case 1.37). Then take `mu` just for `tree.Clone()` (O(1)).
+   `google/btree` forbids running `Clone` concurrently with mutations, and taking `mu` also keeps it clean under
+   `-race`. Reading `lastSeq` and cloning happen in the same critical section, so the clone is exactly the state at
+   `lastSeq`. Release `writeSlot`; writes continue into the new segment.
+2. Without holding `writeSlot`: write `snap-<lastSeq>.snap.tmp` → fsync → rename → fsync dir. If a previous attempt
+   already renamed this exact snapshot into place (and then failed its dir fsync), accept it and fsync the dir.
+3. Delete every segment wholly covered by the newest snapshot (the next segment starts at or before `snapSeq+1`)
+   and all older snapshots, then fsync dir. This also runs when step 1 found nothing new, which finishes the
+   cleanup of a snapshot interrupted by a crash.
+
+**Failures:** a failure in step 2 or 3 returns an error, leaves the DB writable, and can be retried. A failure
+while rotating fails the DB: `CreateSegment` can fail after its rename, and appending on to the old segment would
+then make the next `Open` see the old segment overlap the new one's start.
 
 **Crash points**, all safe because recovery filters by seq:
 - Before step 2's rename: `.tmp` left over. Recovery deletes `*.tmp` and replays from the old snapshot plus all

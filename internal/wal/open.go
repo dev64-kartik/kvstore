@@ -161,7 +161,7 @@ func openLast(fsys vfs.FS, path string, startSeq uint64, replay func(Record) err
 		oi = OpenInfo{TornBytes: info.tornLen, TornSegment: path}
 	}
 	// The handle was opened in append mode, so writes go to the (new) end.
-	return &Writer{f: f, path: path, nextSeq: info.lastSeq + 1}, oi, nil
+	return &Writer{f: f, path: path, startSeq: startSeq, nextSeq: info.lastSeq + 1}, oi, nil
 }
 
 // removeTempSegments deletes leftover segment temp files. They come from a
