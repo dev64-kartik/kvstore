@@ -31,3 +31,17 @@ Compare-and-swap isn't: replaying "CAS k from 1 to 2" on a state where k is alre
 differs. The rule (seq and clone in one critical section) has to be right before Phase 3 makes it observable.
 Lesson: a correctness test that only checks the final state is blind to bugs that the operations' algebra
 masks.
+
+## My crash simulator was kinder than the disk (2026-11-17)
+
+Step 8 measured the new randomized crash test by re-introducing old bugs. It caught a missing WAL fsync, a
+missing torn-tail truncation and a missing snapshot fsync. It did *not* catch a missing directory fsync after
+the snapshot rename. The reason: crashfs keeps a *prefix* of unsynced directory operations, so the cleanup's
+later `remove`s can only survive if the `rename` before them did. And the cleanup ends with its own directory
+fsync, which persists the rename anyway. Real filesystems promise no ordering between unsynced directory
+operations, so a disk could persist the removals of the old WAL segments and lose the new snapshot's name:
+total data loss. The targeted test (crash at every op of `WriteSnapshot`) still catches it, because it crashes in
+the window right after the rename. Lessons: a simulator encodes assumptions, and "it passes under simulation" is
+only as strong as the simulator's weakest one. Mutation testing (break it on purpose, see who notices) is how I
+found out which assumption it was. The same run showed the `SIGKILL` test can't catch a missing fsync at all,
+since the OS keeps the page cache across a process crash, so it has to be paired with power-loss simulation.

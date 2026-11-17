@@ -6,7 +6,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"log/slog"
 	"math/rand/v2"
 	"path/filepath"
@@ -19,6 +18,8 @@ import (
 )
 
 const testDir = "/db"
+
+var discard = slog.New(slog.DiscardHandler)
 
 var seedFlag = flag.Uint64("seed", 0, "seed for randomized tests (0 = pick one)")
 
@@ -40,7 +41,7 @@ func newFS() *crashfs.FS {
 
 func mustOpen(t *testing.T, fsys *crashfs.FS) *DB {
 	t.Helper()
-	db, err := Open(testDir, Options{FS: fsys, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	db, err := Open(testDir, Options{FS: fsys, Logger: discard})
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
