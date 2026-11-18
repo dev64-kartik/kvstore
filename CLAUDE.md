@@ -18,7 +18,7 @@ review.** Optimize every change for a human reviewer, not for speed of generatio
 **Change size and shape**
 - One concept per change. Example sequence: "WAL record encoding", then "WAL reader with CRC check", then
   "torn-tail truncation". Never a whole subsystem in one go.
-- Aim for at most ~300 lines of hand-written diff per change (generated code such as protobuf doesn't count). If a
+- Aim for at most ~500 lines of hand-written diff per change (generated code such as protobuf doesn't count). If a
   step needs more, split it and tell me the split first.
 - Tests go in the same change as the code they test.
 - Don't scaffold ahead: no empty packages, stub files or interfaces for future phases.
@@ -93,7 +93,7 @@ Each phase leaves a working, demonstrable system.
 9. Benchmarks vs etcd, profiling, at least one profile-driven optimization
 10. Docs, README, architecture diagram, blog series (ongoing, finished last)
 
-**Current phase:** 1 complete (2026-11-17) · **Last thing done:** step 8 (randomized crashfs + SIGKILL crash tests). Next: Phase 2 design doc, not started
+**Current phase:** 2 · **Last thing done:** Phase 1 complete (2026-11-17); Phase 2 design approved; step 0 (proto + codegen boilerplate) in progress
 
 ## Correctness rules
 
