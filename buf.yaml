@@ -1,0 +1,14 @@
+# Proto module config. Run via `make proto`; buf is pinned in go.mod as a tool.
+version: v2
+modules:
+  - path: api
+lint:
+  use:
+    - STANDARD
+  except:
+    # STANDARD wants the file at kvstore/v1/ to match `package kvstore.v1`. The repo layout
+    # (CLAUDE.md) keeps the proto next to its generated Go package in api/kvpb/ instead.
+    - PACKAGE_DIRECTORY_MATCH
+breaking:
+  use:
+    - FILE

@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+// Package kvstore.v1 is the client API of a kvstore node.
+//
+// Write outcomes: a write that returns OK is durable. One that returns
+// INVALID_ARGUMENT (or RESOURCE_EXHAUSTED for an oversized request) was not
+// applied. For any other status the write may or may not have been applied:
+// the server can't cancel a write once its log append starts, and a transport
+// error says nothing about whether the request arrived.
+package kvstore.v1;
+
+option go_package = "github.com/dev64-kartik/kvstore/api/kvpb";
+
+// KVService is a key-value store with single-key operations. Keys are 1 byte
+// to 4 KiB, values 0 bytes to 1 MiB, both arbitrary bytes.
+service KVService {
+  // Get returns the value for a key. A missing key is not an error: the
+  // response has found = false.
+  rpc Get(GetRequest) returns (GetResponse);
+  // Put durably sets a key to a value.
+  rpc Put(PutRequest) returns (PutResponse);
+  // Delete durably removes a key. Deleting a missing key succeeds.
+  rpc Delete(DeleteRequest) returns (DeleteResponse);
+}
+
+message GetRequest {
+  bytes key = 1;
+}
+
+message GetResponse {
+  // Needed because proto3 can't tell an empty value from an absent one, and
+  // empty values are legal.
+  bool found = 1;
+  bytes value = 2;
+}
+
+message PutRequest {
+  bytes key = 1;
+  bytes value = 2;
+}
+
+// Empty, rather than google.protobuf.Empty, so fields can be added later.
+message PutResponse {}
+
+message DeleteRequest {
+  bytes key = 1;
+}
+
+message DeleteResponse {}

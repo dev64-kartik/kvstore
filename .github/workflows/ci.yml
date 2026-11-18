@@ -17,6 +17,9 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Proto (lint, and generated code matches kv.proto)
+        run: make proto-check
+
       - name: Build
         run: go build ./...
 

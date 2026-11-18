@@ -93,7 +93,7 @@ Each phase leaves a working, demonstrable system.
 9. Benchmarks vs etcd, profiling, at least one profile-driven optimization
 10. Docs, README, architecture diagram, blog series (ongoing, finished last)
 
-**Current phase:** 2 · **Last thing done:** Phase 1 complete (2026-11-17); Phase 2 design approved; step 0 (proto + codegen boilerplate) in progress
+**Current phase:** 2 · **Last thing done:** Phase 1 complete (2026-11-17); Phase 2 design approved; step 0 (proto + codegen boilerplate) in review
 
 ## Correctness rules
 
@@ -150,6 +150,7 @@ golangci-lint run
 go test -race ./...                        # always with -race
 go test -race -run TestName ./internal/wal/...
 go test -race -count=50 -run TestName ./...  # shake out flaky/concurrency bugs
+make proto                                 # after editing api/kvpb/kv.proto: format, lint, regenerate
 ```
 
 **CI** (GitHub Actions, standard hosted runners only): build, vet, lint and `test -race` on every push and PR.

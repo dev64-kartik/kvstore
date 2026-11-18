@@ -41,7 +41,7 @@ syntax = "proto3";
 package kvstore.v1;
 option go_package = "github.com/dev64-kartik/kvstore/api/kvpb";
 
-service KV {
+service KVService {
   rpc Get(GetRequest) returns (GetResponse);
   rpc Put(PutRequest) returns (PutResponse);
   rpc Delete(DeleteRequest) returns (DeleteResponse);
@@ -61,6 +61,8 @@ message DeleteResponse {}
   `client.ErrNotFound`, matching the Go API from Phase 1.
 - `found` is needed because proto3 can't tell an empty `bytes` value from an absent one, and empty values are
   legal (edge case 1.19).
+- The service is `KVService`, not `KV`: buf's standard lint rules require the `Service` suffix, and following
+  them beats carrying exceptions.
 - Empty response messages, rather than `google.protobuf.Empty`, so fields can be added later (e.g. a revision)
   without changing the RPC signature.
 - Keys and values are `bytes`, not `string`: proto3 `string` must be valid UTF-8, and our keys are arbitrary bytes.
