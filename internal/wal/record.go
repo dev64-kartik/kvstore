@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"hash/crc32"
 	"slices"
+
+	"github.com/dev64-kartik/kvstore/internal/store"
 )
 
 // Record layout. All integers are little-endian.
@@ -20,11 +22,11 @@ import (
 // The value part (valLen + value) is present only for OpPut.
 const headerSize = 16
 
-// Size limits. They are enforced on both encode and decode, so a record that
+// Size limits, from the data model. They are enforced on both encode and decode, so a record that
 // could not be read back can never be written.
 const (
-	MaxKeySize   = 4 << 10 // 4 KiB
-	MaxValueSize = 1 << 20 // 1 MiB
+	MaxKeySize   = store.MaxKeySize
+	MaxValueSize = store.MaxValueSize
 
 	// MaxPayload bounds the length field: op byte, two length varints, key,
 	// value. Anything larger can only be garbage.

@@ -16,10 +16,10 @@ import (
 )
 
 var (
-	// ErrNotFound: Get found no value for the key.
-	ErrNotFound = errors.New("localdb: key not found")
-	// ErrInvalidArgument: a key or value is outside the size limits.
-	ErrInvalidArgument = errors.New("localdb: invalid argument")
+	// ErrNotFound and ErrInvalidArgument are the data model's errors, so
+	// errors.Is matches them against either name.
+	ErrNotFound        = store.ErrNotFound
+	ErrInvalidArgument = store.ErrInvalidArgument
 	// ErrFailed: an earlier WAL write or sync failed, so the DB accepts no more
 	// writes. Reads keep working. Reopen to recover (design doc: "Write
 	// failure policy").
@@ -28,10 +28,10 @@ var (
 	ErrClosed = errors.New("localdb: closed")
 )
 
-// Size limits. Keys must be non-empty.
+// Size limits, from the data model. Keys must be non-empty.
 const (
-	MaxKeySize   = wal.MaxKeySize
-	MaxValueSize = wal.MaxValueSize
+	MaxKeySize   = store.MaxKeySize
+	MaxValueSize = store.MaxValueSize
 )
 
 // Options configures Open. The zero value uses the real filesystem and
@@ -128,7 +128,7 @@ func Open(dir string, opts Options) (*DB, error) {
 // Get returns a copy of the value for key, or ErrNotFound. It does no I/O
 // and never waits for a write's fsync, only for the in-memory update.
 func (db *DB) Get(key []byte) ([]byte, error) {
-	if err := checkKey(key); err != nil {
+	if err := store.CheckKey(key); err != nil {
 		return nil, err
 	}
 	db.mu.RLock()
@@ -150,11 +150,11 @@ func (db *DB) Get(key []byte) ([]byte, error) {
 // record has started, it runs to completion: abandoning it would leave us
 // unsure what's on disk.
 func (db *DB) Put(ctx context.Context, key, value []byte) error {
-	if err := checkKey(key); err != nil {
+	if err := store.CheckKey(key); err != nil {
 		return err
 	}
-	if len(value) > MaxValueSize {
-		return fmt.Errorf("%w: value is %d bytes, max %d", ErrInvalidArgument, len(value), MaxValueSize)
+	if err := store.CheckValue(value); err != nil {
+		return err
 	}
 	return db.write(ctx, wal.OpPut, key, value)
 }
@@ -162,7 +162,7 @@ func (db *DB) Put(ctx context.Context, key, value []byte) error {
 // Delete durably removes key. Deleting a missing key succeeds, and is still
 // logged, which keeps the write path uniform.
 func (db *DB) Delete(ctx context.Context, key []byte) error {
-	if err := checkKey(key); err != nil {
+	if err := store.CheckKey(key); err != nil {
 		return err
 	}
 	return db.write(ctx, wal.OpDelete, key, nil)
@@ -252,13 +252,6 @@ func (db *DB) Close() error {
 	db.mu.Unlock()
 	if err := db.wal.Close(); err != nil {
 		return fmt.Errorf("localdb: close: %w", err)
-	}
-	return nil
-}
-
-func checkKey(key []byte) error {
-	if len(key) == 0 || len(key) > MaxKeySize {
-		return fmt.Errorf("%w: key is %d bytes, want 1..%d", ErrInvalidArgument, len(key), MaxKeySize)
 	}
 	return nil
 }
