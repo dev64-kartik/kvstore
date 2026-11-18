@@ -93,7 +93,7 @@ Each phase leaves a working, demonstrable system.
 9. Benchmarks vs etcd, profiling, at least one profile-driven optimization
 10. Docs, README, architecture diagram, blog series (ongoing, finished last)
 
-**Current phase:** 2 · **Last thing done:** Phase 1 complete (2026-11-17); Phase 2 design approved; step 2 (internal/server) in review
+**Current phase:** 2 · **Last thing done:** Phase 1 complete (2026-11-17); Phase 2 design approved; step 3 (pkg/client) in review
 
 ## Correctness rules
 
