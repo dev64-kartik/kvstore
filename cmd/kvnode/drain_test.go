@@ -43,7 +43,7 @@ func startBlocked(t *testing.T) (*grpc.Server, *blockingStore, <-chan error) {
 	lis := bufconn.Listen(1 << 20)
 	g := grpc.NewServer(server.Options()...)
 	kvpb.RegisterKVServiceServer(g, server.New(st, slog.New(slog.DiscardHandler)))
-	go func() { _ = g.Serve(lis) }() //nolint:errcheck // Serve's error after Stop is nil; nothing to report
+	go func() { _ = g.Serve(lis) }() //nolint:errcheck // nil or ErrServerStopped once the test stops it; nothing to report
 	conn, err := grpc.NewClient("passthrough:///bufnet",
 		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) { return lis.DialContext(ctx) }),
 		grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -92,5 +92,20 @@ func TestGracefulStopCancelsAfterTimeout(t *testing.T) {
 	gracefulStop(g, 10*time.Millisecond, slog.New(slog.DiscardHandler))
 	if err := <-result; status.Code(err) == codes.OK {
 		t.Fatal("stuck RPC succeeded; want it cancelled by Stop")
+	}
+}
+
+// Regression: a shutdown signal that arrives before the Serve goroutine runs
+// made Serve return grpc.ErrServerStopped, and run reported it, so a clean
+// SIGTERM could exit with status 1. A ctx that is already cancelled makes
+// shutdown race Serve on every iteration. The race isn't certain on any one
+// run, so it repeats; before the fix this failed within a few iterations.
+func TestImmediateShutdownIsClean(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	for i := range 50 {
+		if err := run(ctx, []string{"-dir", t.TempDir(), "-addr", "127.0.0.1:0"}, slog.New(slog.DiscardHandler)); err != nil {
+			t.Fatalf("iteration %d: run with an already-cancelled ctx: %v, want a clean shutdown", i, err)
+		}
 	}
 }

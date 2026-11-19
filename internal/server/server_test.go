@@ -47,7 +47,8 @@ func serve(t *testing.T, st Store) kvpb.KVServiceClient {
 			t.Error(err)
 		}
 		g.Stop()
-		if err := <-served; err != nil {
+		// Same race as in pkg/client's TestNodeStoppedBeforeServing.
+		if err := <-served; err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 			t.Errorf("Serve: %v", err)
 		}
 	})

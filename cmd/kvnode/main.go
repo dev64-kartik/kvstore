@@ -92,7 +92,10 @@ func run(ctx context.Context, args []string, log *slog.Logger) (err error) {
 	// in-flight writes would fail with ErrClosed. Then stop the ticker (a
 	// snapshot in progress sees its ctx cancelled), then close the DB.
 	gracefulStop(g, shutdownTimeout, log)
-	if serveErr := <-served; err == nil && serveErr != nil {
+	// ErrServerStopped means the shutdown reached gRPC before the goroutine
+	// reached Serve: a signal right after startup. That's a clean shutdown,
+	// not a serving error (TestImmediateShutdownIsClean).
+	if serveErr := <-served; err == nil && serveErr != nil && !errors.Is(serveErr, grpc.ErrServerStopped) {
 		err = fmt.Errorf("serve: %w", serveErr)
 	}
 	stopTicker()

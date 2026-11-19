@@ -45,3 +45,15 @@ the window right after the rename. Lessons: a simulator encodes assumptions, and
 only as strong as the simulator's weakest one. Mutation testing (break it on purpose, see who notices) is how I
 found out which assumption it was. The same run showed the `SIGKILL` test can't catch a missing fsync at all,
 since the OS keeps the page cache across a process crash, so it has to be paired with power-loss simulation.
+
+## A test-helper flake that was hiding a production bug (2026-11-18)
+
+CI on Linux failed a client test with "Serve: grpc: the server has been stopped". It never failed on my Mac, even
+in 300 repeated runs. The test stopped a gRPC server right after starting it, and the helper started `Serve` in a
+goroutine. On a fast runner, `Stop` sometimes ran before that goroutine reached `Serve`, and `Serve` then returns
+`ErrServerStopped`. The tempting conclusion was "flaky test, ignore that error in the helper". But the node binary
+has the same shape: `go g.Serve(lis)`, then shutdown on SIGTERM. A SIGTERM right after startup would make `run()`
+report a serving error and exit 1 on a perfectly clean shutdown. Two lessons. A flake is a race somewhere, and the
+first question is whether production code has the same shape. And when a race won't reproduce by repetition,
+force the interleaving: stop *before* serving (deterministic), or start from an already-cancelled context (which
+loses the race almost every time).

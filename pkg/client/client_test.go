@@ -40,16 +40,28 @@ type node struct {
 
 func startNode(t *testing.T, st server.Store) *node {
 	t.Helper()
+	n := newNode(st)
+	n.serve(t)
+	return n
+}
+
+func newNode(st server.Store) *node {
 	n := &node{lis: bufconn.Listen(1 << 20), stopped: make(chan struct{}), g: grpc.NewServer(server.Options()...)}
 	kvpb.RegisterKVServiceServer(n.g, server.New(st, discard))
+	return n
+}
+
+// serve runs Serve in a goroutine; stop (also a cleanup) ends it.
+func (n *node) serve(t *testing.T) {
 	go func() {
 		defer close(n.stopped)
-		if err := n.g.Serve(n.lis); err != nil {
+		// ErrServerStopped means stop won the race to the goroutine, which
+		// tests that stop a node right away do (TestNodeStoppedBeforeServing).
+		if err := n.g.Serve(n.lis); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 			t.Errorf("Serve: %v", err)
 		}
 	}()
 	t.Cleanup(n.stop)
-	return n
 }
 
 func (n *node) stop() {
@@ -260,4 +272,15 @@ func TestServerDownFailsFastAndIndeterminate(t *testing.T) {
 	if !errors.Is(err, client.ErrIndeterminate) || status.Code(err) != codes.Unavailable {
 		t.Fatalf("Put to a stopped server: %v, want ErrIndeterminate with Unavailable", err)
 	}
+}
+
+// Regression (CI failure on f5dc48d/f17443d): a test that stops a node right
+// after starting it can run Stop before the goroutine reaches Serve. Serve
+// then returns grpc.ErrServerStopped, which the helper reported as a test
+// failure. This forces that order instead of hoping the scheduler hits it.
+func TestNodeStoppedBeforeServing(t *testing.T) {
+	n := newNode(&fakeStore{})
+	n.g.Stop()
+	n.serve(t)
+	n.stop()
 }
